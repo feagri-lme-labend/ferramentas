@@ -1,0 +1,40 @@
+# ===============================================
+# Python (Geral)
+# ===============================================
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribuição e Build
+.Python
+build/
+dist/
+develop-eggs/
+sdist/
+eggs/
+*.egg-info/
+.installed.cfg
+*.manifest
+
+# ===============================================
+# Ambientes Virtuais
+# ===============================================
+
+# Ambiente Virtual
+venv/
+env/
+.venv/
+ENV/
+env.bak/
+/bin/
+/include/
+/lib/
+/share/
+
+# Arquivos de Lock de Ambientes (se usados)
+Pipfile.lock
+poetry.lock  # Se estiver usando Poetry
+
+amostras_completas.csv
