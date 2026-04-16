@@ -15,6 +15,9 @@ st.title("$\\text{[Análise] Ensaios de Conexões}$")
 def carregar_csv(file):
     return pd.read_csv(file)
 
+def fig_to_png(fig):
+    return fig.to_image(format="png", scale=3)
+
 # =====================================================
 # SESSION STATE
 # =====================================================
@@ -54,6 +57,7 @@ if uploaded_files:
                 "invert_y":"Normal",
                 "resultados":None
             }
+
 else:
     st.info("Aguardando carregamento de arquivos")
     st.stop()
@@ -90,7 +94,6 @@ tempo = df[col_tempo].to_numpy()
 desloc = df[col_desloc].to_numpy()
 forca = df[col_forca].to_numpy()
 
-# vetor com o índice de cada ponto da série
 indices = np.arange(len(df))
 
 # =====================================================
@@ -121,285 +124,283 @@ if invert_y == "Invertido":
     forca = -forca
 
 # =====================================================
-# FMAX
+# CÁLCULOS
 # =====================================================
 
 Fmax = np.max(forca)
 
-F06 = 0.6 * Fmax
-F08 = 0.8 * Fmax
+try:
 
-idx_fmax = np.argmax(forca)
+    F06 = 0.6 * Fmax
+    F08 = 0.8 * Fmax
 
-# procura apenas até o pico
-forca_sub = forca[:idx_fmax]
+    idx_fmax = np.argmax(forca)
 
-idx_v26 = np.where(forca[:idx_fmax] >= F06)[0][0]
-idx_v28 = np.where(forca[:idx_fmax] >= F08)[0][0]
+    idx_v26 = np.where(forca[:idx_fmax] >= F06)[0][0]
+    idx_v28 = np.where(forca[:idx_fmax] >= F08)[0][0]
 
-# =====================================================
-# PONTOS
-# =====================================================
+    # =====================================================
+    # PONTOS
+    # =====================================================
 
-st.sidebar.subheader("$\\text{Índices}$")
+    st.sidebar.subheader("$\\text{Índices}$")
 
-n = len(df)
+    n = len(df)
 
-def escolher(nome):
+    pontos_lista = ["v01","v04","v14","v11","v21","v24"]
 
-    valor = st.sidebar.number_input(
-        nome,
-        min_value=1,
-        max_value=n,
-        value=dados["pontos"][nome],
-        step=1
-    )
+    indices_pontos = {}
 
-    dados["pontos"][nome] = valor
+    for nome in pontos_lista:
 
-    return valor - 1
+        valor = st.sidebar.number_input(
+            nome,
+            min_value=1,
+            max_value=n,
+            value=dados["pontos"][nome],
+            step=1
+        )
 
-v01_i = escolher("v01")
-v04_i = escolher("v04")
-v14_i = escolher("v14")
-v11_i = escolher("v11")
-v21_i = escolher("v21")
-v24_i = escolher("v24")
+        dados["pontos"][nome] = valor
+        indices_pontos[nome] = valor - 1
 
-# =====================================================
-# VALORES
-# =====================================================
+    v01_i = indices_pontos["v01"]
+    v04_i = indices_pontos["v04"]
+    v14_i = indices_pontos["v14"]
+    v11_i = indices_pontos["v11"]
+    v21_i = indices_pontos["v21"]
+    v24_i = indices_pontos["v24"]
 
-v01 = desloc[v01_i]
-v04 = desloc[v04_i]
-v14 = desloc[v14_i]
-v11 = desloc[v11_i]
-v21 = desloc[v21_i]
-v24 = desloc[v24_i]
+    # =====================================================
+    # VALORES
+    # =====================================================
 
-v26 = desloc[idx_v26]
-v28 = desloc[idx_v28]
-
-# =====================================================
-# RIGIDEZ
-# =====================================================
-
-F04 = forca[v04_i]
-F11 = forca[v11_i]
-
-# =====================================================
-# PARÂMETROS
-# =====================================================
-
-v_i = v04
-v_i_mod = (4/3)*(v04 - v01)
-
-v_s = v_i - v_i_mod
-v_e = (2/3)*(v14 + v24 - v11 - v21)
-
-Fest = F04/.4
-
-ki = F04 / v_i
-ks = F04 / v_i_mod
-
-v06_mod = v26 - v24 + v_i_mod
-v08_mod = v28 - v24 + v_i_mod
-
-resultados = pd.DataFrame([{
-    "arquivo": file.name,
-
-    "vi": v_i,
-    "vi_mod": v_i_mod,
-    "vs": v_s,
-    "ki": ki,
-    "ks": ks,
-    "ve": v_e,
-
-    "v_0.6": v26,
-    "v_0.6_mod": v06_mod,
-    "v_0.8": v28,
-    "v_0.8_mod": v08_mod,
-
-    # índices escolhidos pelo usuário
-    "idx_v01": v01_i,
-    "idx_v04": v04_i,
-    "idx_v11": v11_i,
-    "idx_v14": v14_i,
-    "idx_v21": v21_i,
-    "idx_v24": v24_i,
-
-    # índices automáticos
-    "idx_v26": idx_v26 + 1,
-    "idx_v28": idx_v28 + 1,
-
-    # inversões
-    "invert_x": invert_x,
-    "invert_y": invert_y,
-
-    # metadados úteis
-    "Fmax": Fmax,
-    "Fest": Fest,
-    "n_pontos": n
-}])
-
-
-dados["resultados"] = resultados
-
-# =====================================================
-# GRÁFICOS
-# =====================================================
-
-col1, col2 = st.columns(2)
-
-# -----------------------------------------------------
-# FORÇA VS TEMPO
-# -----------------------------------------------------
-
-with col1:
-
-    fig_tempo = go.Figure()
-
-    fig_tempo.add_trace(go.Scatter(
-        x=tempo,
-        y=forca,
-        mode="lines",
-        name="Curva",
-        customdata=indices,
-        hovertemplate=
-            "Índice: %{customdata}<br>" +
-            "Tempo: %{x}<br>" +
-            "Força: %{y}<extra></extra>"
-    ))
-
-    pontos_tempo = [
-        (tempo[v01_i], forca[v01_i], "01"),
-        (tempo[v04_i], forca[v04_i], "04"),
-        (tempo[v14_i], forca[v14_i], "14"),
-        (tempo[v11_i], forca[v11_i], "11"),
-        (tempo[v21_i], forca[v21_i], "21"),
-        (tempo[v24_i], forca[v24_i], "24")
+    v01, v04, v14, v11, v21, v24 = [
+        desloc[indices_pontos[p]]
+        for p in pontos_lista
     ]
 
-    for x, y, label in pontos_tempo:
+    v26 = desloc[idx_v26]
+    v28 = desloc[idx_v28]
+
+    # =====================================================
+    # RIGIDEZ
+    # =====================================================
+
+    F04 = forca[v04_i]
+    F11 = forca[v11_i]
+
+    # =====================================================
+    # PARÂMETROS
+    # =====================================================
+
+    v_i = v04
+    v_i_mod = (4/3)*(v04 - v01)
+
+    v_s = v_i - v_i_mod
+    v_e = (2/3)*(v14 + v24 - v11 - v21)
+
+    Fest = F04/.4
+
+    ki = F04 / v_i
+    ks = F04 / v_i_mod
+
+    v06_mod = v26 - v24 + v_i_mod
+    v08_mod = v28 - v24 + v_i_mod
+
+    resultados = pd.DataFrame([{
+        "arquivo": arquivo_atual,
+
+        "vi": v_i,
+        "vi_mod": v_i_mod,
+        "vs": v_s,
+        "ki": ki,
+        "ks": ks,
+        "ve": v_e,
+
+        "v_0.6": v26,
+        "v_0.6_mod": v06_mod,
+        "v_0.8": v28,
+        "v_0.8_mod": v08_mod,
+
+        "idx_v01": v01_i,
+        "idx_v04": v04_i,
+        "idx_v11": v11_i,
+        "idx_v14": v14_i,
+        "idx_v21": v21_i,
+        "idx_v24": v24_i,
+
+        "idx_v26": idx_v26 + 1,
+        "idx_v28": idx_v28 + 1,
+
+        "invert_x": invert_x,
+        "invert_y": invert_y,
+
+        "Fmax": Fmax,
+        "Fest": Fest,
+        "n_pontos": n
+    }])
+
+    dados["resultados"] = resultados
+
+    # =====================================================
+    # GRÁFICOS
+    # =====================================================
+
+    col1, col2 = st.columns(2)
+
+    # -----------------------------------------------------
+    # FORÇA VS TEMPO
+    # -----------------------------------------------------
+
+    with col1:
+
+        fig_tempo = go.Figure()
 
         fig_tempo.add_trace(go.Scatter(
-            x=[x],
-            y=[y],
-            mode="markers+text",
-            text=[label],
-            textposition="top center",
-            marker=dict(size=10),
-            name=f"Ponto {label}"
+            x=tempo,
+            y=forca,
+            mode="lines",
+            name="Curva",
+            customdata=indices,
+            hovertemplate=
+                "Índice: %{customdata}<br>" +
+                "Tempo: %{x}<br>" +
+                "Força: %{y}<extra></extra>"
         ))
 
-    fig_tempo.add_hline(
-        y=F04,
-        line_dash="dash",
-        line_color="red",
-        annotation_text="F04"
-    )
+        pontos_tempo = [
+            (tempo[indices_pontos[p]], forca[indices_pontos[p]], p[1:])
+            for p in pontos_lista
+        ]
 
-    fig_tempo.add_hline(
-        y=F11,
-        line_dash="dash",
-        line_color="green",
-        annotation_text="F11"
-    )
+        for x, y, label in pontos_tempo:
 
-    fig_tempo.add_hline(
-        y=Fest,
-        line_dash="dash",
-        line_color="magenta",
-        annotation_text="Fest"
-    )
+            fig_tempo.add_trace(go.Scatter(
+                x=[x],
+                y=[y],
+                mode="markers+text",
+                text=[label],
+                textposition="top center",
+                marker=dict(size=10),
+                name=f"Ponto {label}"
+            ))
 
-    fig_tempo.update_layout(
-        title="Força vs Tempo",
-        xaxis_title="Tempo",
-        yaxis_title="Força"
-    )
+        fig_tempo.add_hline(y=F04, line_dash="dash", line_color="red", annotation_text="F04")
+        fig_tempo.add_hline(y=F11, line_dash="dash", line_color="green", annotation_text="F11")
+        fig_tempo.add_hline(y=Fest, line_dash="dash", line_color="magenta", annotation_text="Fest")
 
-    st.plotly_chart(fig_tempo, width="stretch")
+        fig_tempo.update_layout(
+            xaxis_title=col_tempo,
+            yaxis_title=col_forca
+        )
 
-# -----------------------------------------------------
-# FORÇA VS DESLOCAMENTO
-# -----------------------------------------------------
+        st.plotly_chart(fig_tempo, width="stretch")
 
-with col2:
+    # -----------------------------------------------------
+    # FORÇA VS DESLOCAMENTO
+    # -----------------------------------------------------
 
-    fig_desloc = go.Figure()
+    with col2:
 
-    fig_desloc.add_trace(go.Scatter(
-        x=desloc,
-        y=forca,
-        mode="lines",
-        name="Curva",
-        customdata=indices,
-        hovertemplate=
-            "Índice: %{customdata}<br>" +
-            "Deslocamento: %{x}<br>" +
-            "Força: %{y}<extra></extra>"
-    ))
-
-    pontos_desloc = [
-        (v01, forca[v01_i], "01"),
-        (v04, forca[v04_i], "04"),
-        (v14, forca[v14_i], "14"),
-        (v11, forca[v11_i], "11"),
-        (v21, forca[v21_i], "21"),
-        (v24, forca[v24_i], "24"),
-        (v26, forca[idx_v26], "26"),
-        (v28, forca[idx_v28], "28")
-    ]
-
-    for x, y, label in pontos_desloc:
+        fig_desloc = go.Figure()
 
         fig_desloc.add_trace(go.Scatter(
-            x=[x],
-            y=[y],
-            mode="markers+text",
-            text=[label],
-            textposition="top center",
-            marker=dict(size=10),
-            name=f"Ponto {label}"
+            x=desloc,
+            y=forca,
+            mode="lines",
+            name="Curva",
+            customdata=indices,
+            hovertemplate=
+                "Índice: %{customdata}<br>" +
+                "Deslocamento: %{x}<br>" +
+                "Força: %{y}<extra></extra>"
         ))
 
-    fig_desloc.update_layout(
-        title="Força vs Deslocamento",
-        xaxis_title="Deslocamento",
-        yaxis_title="Força"
-    )
+        pontos_desloc = [
+            (desloc[indices_pontos[p]], forca[indices_pontos[p]], p[1:])
+            for p in pontos_lista
+        ]
 
-    st.plotly_chart(fig_desloc, width="stretch")
+        pontos_desloc += [
+            (v26, forca[idx_v26], "26"),
+            (v28, forca[idx_v28], "28")
+        ]
 
-# =====================================================
-# CONSOLIDADO
-# =====================================================
+        for x, y, label in pontos_desloc:
 
-st.subheader("$\\text{Resultados consolidados}$")
+            fig_desloc.add_trace(go.Scatter(
+                x=[x],
+                y=[y],
+                mode="markers+text",
+                text=[label],
+                textposition="top center",
+                marker=dict(size=10),
+                name=f"Ponto {label}"
+            ))
 
-tabela = []
+        fig_desloc.update_layout(
+            xaxis_title=col_desloc,
+            yaxis_title=col_forca
+        )
 
-for nome, dados in st.session_state.ensaios.items():
+        st.plotly_chart(fig_desloc, width="stretch")
 
-    if dados["resultados"] is not None:
+    # =====================================================
+    # DOWNLOAD DOS GRÁFICOS
+    # =====================================================
 
-        r = dados["resultados"].iloc[0]
+    col_down1, col_down2 = st.columns(2)
 
-        linha = r.to_dict()
-        linha["arquivo"] = nome
+    with col_down1:
 
-        tabela.append(linha)
+        st.download_button(
+            label="$\\text{Baixar gráfico Força vs Tempo}$",
+            data=fig_to_png(fig_tempo),
+            file_name=f"{arquivo_atual}_force_time.png",
+            mime="image/png"
+        )
 
-if tabela:
+    with col_down2:
 
-    df_final = pd.DataFrame(tabela)
+        st.download_button(
+            label="$\\text{Baixar gráfico Força vs Deslocamento}$",
+            data=fig_to_png(fig_desloc),
+            file_name=f"{arquivo_atual}_force_displacement.png",
+            mime="image/png"
+        )
 
-    st.dataframe(df_final)
+    # =====================================================
+    # CONSOLIDADO
+    # =====================================================
 
-    st.download_button(
-        "$\\text{Exportar CSV}$",
-        df_final.to_csv(index=False),
-        "resultados_ensaios.csv",
-        "text/csv"
-    )
+    st.subheader("$\\text{Resultados consolidados}$")
+
+    tabela = []
+
+    for nome, dados in st.session_state.ensaios.items():
+
+        if dados["resultados"] is not None:
+
+            r = dados["resultados"].iloc[0]
+
+            linha = r.to_dict()
+            linha["arquivo"] = nome
+
+            tabela.append(linha)
+
+    if tabela:
+
+        df_final = pd.DataFrame(tabela)
+
+        st.dataframe(df_final)
+
+        st.download_button(
+            "$\\text{Exportar CSV}$",
+            df_final.to_csv(index=False),
+            "resultados_ensaios.csv",
+            "text/csv"
+        )
+
+except (TypeError, IndexError):
+    st.warning("Arquivo inválido!")
