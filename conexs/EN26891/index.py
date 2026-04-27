@@ -15,8 +15,8 @@ st.title("$\\text{[Análise] Ensaios de Conexões}$")
 def carregar_csv(file):
     return pd.read_csv(file)
 
-def fig_to_png(fig):
-    return fig.to_image(format="png", scale=3)
+def fig_to_html(fig):
+    return fig.to_html(full_html=False, include_plotlyjs="cdn")
 
 # =====================================================
 # SESSION STATE
@@ -355,19 +355,19 @@ try:
     with col_down1:
 
         st.download_button(
-            label="$\\text{Baixar gráfico Força vs Tempo}$",
-            data=fig_to_png(fig_tempo),
-            file_name=f"{arquivo_atual}_force_time.png",
-            mime="image/png"
+            label="$\\text{Baixar gráfico (HTML)}$",
+            data=fig_to_html(fig_tempo),
+            file_name=f"{arquivo_atual}_force_time.html",
+            mime="text/html"
         )
 
     with col_down2:
 
         st.download_button(
-            label="$\\text{Baixar gráfico Força vs Deslocamento}$",
-            data=fig_to_png(fig_desloc),
-            file_name=f"{arquivo_atual}_force_displacement.png",
-            mime="image/png"
+            label="$\\text{Baixar gráfico (HTML)}$",
+            data=fig_to_html(fig_desloc),
+            file_name=f"{arquivo_atual}_force_displacement.html",
+            mime="text/html"
         )
 
     # =====================================================
