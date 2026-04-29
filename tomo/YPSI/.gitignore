@@ -1,0 +1,71 @@
+# =========================
+# Python cache
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# =========================
+# Virtual environments
+# =========================
+venv/
+env/
+ENV/
+.venv/
+
+# =========================
+# Streamlit
+# =========================
+.streamlit/secrets.toml
+.streamlit/cache/
+
+# =========================
+# Jupyter Notebook
+# =========================
+.ipynb_checkpoints/
+
+# =========================
+# Distribution / packaging
+# =========================
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# =========================
+# Logs
+# =========================
+*.log
+logs/
+
+# =========================
+# OS files
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# IDEs
+# =========================
+.vscode/
+.idea/
+
+# =========================
+# pytest / coverage
+# =========================
+.pytest_cache/
+.coverage
+htmlcov/
+
+# =========================
+# Mypy
+# =========================
+.mypy_cache/
+
+# =========================
+# Streamlit runtime cache (opcional)
+# =========================
+.streamlit/runtime/
