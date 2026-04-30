@@ -1,6 +1,6 @@
 import cv2
 
-def auto_resize_image(img_np, max_dim=10000):
+def auto_resize_image(img_np, max_dim):
 
     h, w = img_np.shape[:2]
     scale_img = 1.0
