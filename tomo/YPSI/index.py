@@ -1,35 +1,53 @@
-import streamlit as st
-import numpy as np
-from PIL import Image
-import cv2
+# ===============================
+# Standard library
+# ===============================
 import json
 from datetime import datetime
-from inp_out.export_zip import build_export_zip
-from inp_out.json_struc import build_section
-from geometry.grid import compute_grid_domain, build_binary_grid
-from processing.image_processing import auto_resize_image
-from visualization.canvas_polygon import polygon_canvas
-from core.polygon_state import update_polygon_state
+
+# ===============================
+# Third-party libraries
+# ===============================
+import cv2
+import numpy as np
+import streamlit as st
+from PIL import Image
+from streamlit.errors import StreamlitAPIException
+
+# ===============================
+# Project modules
+# ===============================
 from core.image_state import reset_if_new_image
-from domain.segment_section import segment_section
-from geometry.zoom import build_zoom_view
+from core.polygon_state import update_polygon_state
+
 from domain.calibration import compute_scale
-from geometry.coordinates import convert_points_to_cm
-from domain.transducers import build_transducers
 from domain.mask import apply_polygon_mask
-from domain.validation import run_validations, find_missing_times
-from streamlit.errors import StreamlitValueAboveMaxError, StreamlitValueBelowMinError, StreamlitAPIException
-from visualization.drawing import draw_polygon_mesh
-from utils.utils import (
-    hex_to_bgr,
-    polygon_centroid
-)
 from domain.propagation import (
     ensure_propagation_matrix,
-    extract_propagation_paths
+    extract_propagation_paths,
 )
+from domain.segment_section import segment_section
+from domain.transducers import build_transducers
+from domain.validation import find_missing_times, run_validations
 
-st.set_page_config(layout="wide", page_title="YPS I", page_icon="https://static.vecteezy.com/system/resources/thumbnails/068/754/722/small/flowing-red-and-yellow-waves-create-a-warm-vibrant-abstract-background-free-vector.jpg")
+from geometry.coordinates import convert_points_to_cm
+from geometry.grid import build_binary_grid, compute_grid_domain
+from geometry.zoom import build_zoom_view
+
+from inp_out.export_zip import build_export_zip
+from inp_out.json_struc import build_section
+
+from processing.image_processing import auto_resize_image
+
+from utils.utils import hex_to_bgr, polygon_centroid
+
+from visualization.canvas_polygon import polygon_canvas
+from visualization.drawing import draw_polygon_mesh
+
+st.set_page_config(
+    layout="wide", 
+    page_title="YPS I", 
+    page_icon="./assets/icon.png"
+)
 
 st.markdown("### 🔊 Tomographic Mesh Definitions")
 
@@ -46,8 +64,17 @@ if uploaded_file:
     reset_if_new_image(uploaded_file)
 
     h, w = img_np.shape[:2]
-    scale_img = 1.0
-    resized = False
+
+    MAX_DIMENSION = 1200
+
+    if h > w:
+        st.warning("Size error: Landscape is necessary")
+        st.stop()
+
+    if w > MAX_DIMENSION:
+        st.warning(f"⚠️ Warning: Image size is too large. Image was resized")
+
+    img_np, h, w, scale_img, resized = auto_resize_image(img_np, MAX_DIMENSION)
 
     # escala salva (importante pra debug/futuro)
     st.session_state.scale_img = scale_img
@@ -59,6 +86,7 @@ if uploaded_file:
 
     # --- CANVAS PARA DESENHO INICIAL ---
     st.markdown("#### 🖌️ Define the polygon")
+    
     
     polygon_canvas(img_np, h, w)
     
@@ -106,8 +134,7 @@ if uploaded_file:
         valor_y_atual = int(st.session_state.pontos[idx][1])
 
         expander = st.sidebar.expander("Coordinate")
-        
-        st.write(st.session_state)
+    
         # Ao passar o parâmetro 'value', garantimos que o slider sempre inicie 
         # com a coordenada correta do ponto selecionado, ignorando valores antigos.
         x = expander.slider("X", 0, w-1, value=valor_x_atual)

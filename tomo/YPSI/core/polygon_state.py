@@ -21,8 +21,8 @@ def update_polygon_state(n_pontos, w, h, scale_img):
         novos_pontos = []
 
         for px, py in st.session_state.pontos:
-            novo_x = int(px * scale_img)
-            novo_y = int(py * scale_img)
+            novo_x = int(px)
+            novo_y = int(py)
             novos_pontos.append([novo_x, novo_y])
 
         st.session_state.pontos = novos_pontos

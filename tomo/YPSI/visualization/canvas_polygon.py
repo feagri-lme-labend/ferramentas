@@ -10,7 +10,7 @@ def polygon_canvas(img_np, h, w):
         stroke_width=2,
         stroke_color="#ff0000",
         background_image=Image.fromarray(img_np),
-        #update_streamlit=True,
+        update_streamlit=True,
         height=h,
         width=w,
         drawing_mode="polygon",
