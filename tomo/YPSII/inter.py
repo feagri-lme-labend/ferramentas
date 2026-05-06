@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.interpolate import Rbf
+from pykrige.ok import OrdinaryKriging
 
 def du_interpolation_simple(coords, T, grid_x, grid_y, eccentricity=1.05):
     """Modelo Du & Wang Clássico (Elipse sem compensação de distância)"""
@@ -362,3 +363,197 @@ def sirt_reconstruction(coords, T, grid_x, grid_y, iterations=10, relaxation=0.1
 
     v_field = 1.0 / s_field
     return X, Y, v_field
+
+def kriging_interpolation(coords, T, grid_x, grid_y, variogram="linear"):
+    """
+    Interpolação por Krigagem (Ordinary Kriging).
+    Usa os centros dos raios como pontos de observação.
+    """
+
+    num_sensors = len(coords)
+    obs_x, obs_y, obs_v = [], [], []
+
+    # Gerar pontos de amostragem (centros dos raios)
+    for i in range(num_sensors):
+        for j in range(i + 1, num_sensors):
+
+            if T[i, j] <= 0:
+                continue
+
+            p1, p2 = coords[i], coords[j]
+
+            dist = np.linalg.norm(p1 - p2)
+            v = dist / T[i, j]
+
+            mid = (p1 + p2) / 2
+
+            obs_x.append(mid[0])
+            obs_y.append(mid[1])
+            obs_v.append(v)
+
+    if len(obs_v) == 0:
+        X, Y = np.meshgrid(grid_x, grid_y)
+        return X, Y, np.zeros_like(X)
+
+    obs_x = np.array(obs_x)
+    obs_y = np.array(obs_y)
+    obs_v = np.array(obs_v)
+
+    # Modelo de Krigagem
+    OK = OrdinaryKriging(
+        obs_x,
+        obs_y,
+        obs_v,
+        variogram_model=variogram,
+        verbose=False,
+        enable_plotting=False
+    )
+
+    z, ss = OK.execute("grid", grid_x, grid_y)
+
+    X, Y = np.meshgrid(grid_x, grid_y)
+
+    return X, Y, z
+
+def ray_kriging_interpolation(coords, T, grid_x, grid_y,
+                              n_segments=8,
+                              variogram="gaussian",
+                              anisotropy_ratio=3.0):
+    """
+    Krigagem anisotrópica baseada em raios.
+
+    Em vez de usar apenas o centro do raio, cria vários pontos
+    ao longo do caminho da onda ultrassônica.
+    """
+
+    num_sensors = len(coords)
+
+    obs_x = []
+    obs_y = []
+    obs_v = []
+
+    for i in range(num_sensors):
+        for j in range(i + 1, num_sensors):
+
+            if T[i, j] <= 0:
+                continue
+
+            p1 = coords[i]
+            p2 = coords[j]
+
+            dist = np.linalg.norm(p1 - p2)
+            v = dist / T[i, j]
+
+            # segmentar o raio
+            for t in np.linspace(0.1, 0.9, n_segments):
+
+                p = p1 + t * (p2 - p1)
+
+                obs_x.append(p[0])
+                obs_y.append(p[1])
+                obs_v.append(v)
+
+    if len(obs_v) == 0:
+
+        X, Y = np.meshgrid(grid_x, grid_y)
+        return X, Y, np.zeros_like(X)
+
+    obs_x = np.array(obs_x)
+    obs_y = np.array(obs_y)
+    obs_v = np.array(obs_v)
+
+    # modelo de kriging
+    OK = OrdinaryKriging(
+        obs_x,
+        obs_y,
+        obs_v,
+        variogram_model=variogram,
+        anisotropy_scaling=anisotropy_ratio,
+        verbose=False,
+        enable_plotting=False
+    )
+
+    z, ss = OK.execute("grid", grid_x, grid_y)
+
+    X, Y = np.meshgrid(grid_x, grid_y)
+
+    return X, Y, z
+
+def beam_divergence_interpolation(coords, T, grid_x, grid_y,
+                                  beam_angle=np.deg2rad(25),
+                                  radial_decay=2.0):
+    """
+    Interpolação baseada em divergência de feixe ultrassônico.
+
+    Cada transdutor emissor gera um feixe cônico (triangular em 2D)
+    apontando para o receptor.
+
+    beam_angle : ângulo total de abertura do feixe
+    radial_decay : controla a perda de energia com distância
+    """
+
+    X, Y = np.meshgrid(grid_x, grid_y)
+
+    vel_sum = np.zeros_like(X)
+    weight_sum = np.zeros_like(X)
+
+    num_sensors = len(coords)
+
+    for i in range(num_sensors):
+        for j in range(i + 1, num_sensors):
+
+            if T[i, j] <= 0:
+                continue
+
+            p1 = coords[i]
+            p2 = coords[j]
+
+            dist = np.linalg.norm(p1 - p2)
+            v = dist / T[i, j]
+
+            # vetor direção emissor → receptor
+            d = p2 - p1
+            d_norm = d / np.linalg.norm(d)
+
+            # vetor ponto emissor → pixel
+            px = X - p1[0]
+            py = Y - p1[1]
+
+            r = np.sqrt(px**2 + py**2)
+
+            # evitar divisão por zero
+            r_safe = np.maximum(r, 1e-6)
+
+            # produto escalar para calcular ângulo
+            cos_angle = (px * d_norm[0] + py * d_norm[1]) / r_safe
+
+            angle = np.arccos(np.clip(cos_angle, -1, 1))
+
+            # máscara angular (cone do feixe)
+            mask = angle <= (beam_angle / 2)
+
+            if not np.any(mask):
+                continue
+
+            # distância perpendicular ao eixo do feixe
+            perp_dist = r * np.sin(angle)
+
+            # peso angular (gaussiano)
+            angular_weight = np.exp(-(angle**2) / (beam_angle/4)**2)
+
+            # peso radial (atenuação)
+            radial_weight = 1 / (1 + r**radial_decay)
+
+            weight = angular_weight * radial_weight
+
+            weight[~mask] = 0
+
+            vel_sum += v * weight
+            weight_sum += weight
+
+    v_field = np.divide(vel_sum, weight_sum,
+                        out=np.zeros_like(vel_sum),
+                        where=weight_sum != 0)
+
+    return X, Y, v_field
+    

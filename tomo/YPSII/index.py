@@ -13,10 +13,17 @@ import os
 st.set_page_config(page_title="YPS II", layout="wide", page_icon="https://static.vecteezy.com/system/resources/thumbnails/068/754/722/small/flowing-red-and-yellow-waves-create-a-warm-vibrant-abstract-background-free-vector.jpg")
 
 from inter import (
-    du_interpolation_simple, du_interpolation_compensated, 
-    linear_back_projection, art_reconstruction, 
-    sirt_reconstruction, rbf_interpolation,
-    ebsi_interpolation, du_2018_segmented_rays
+    du_interpolation_simple,
+    du_interpolation_compensated,
+    linear_back_projection,
+    art_reconstruction,
+    sirt_reconstruction,
+    rbf_interpolation,
+    ebsi_interpolation,
+    du_2018_segmented_rays,
+    kriging_interpolation,
+    ray_kriging_interpolation,
+    beam_divergence_interpolation,
 )
 
 # ---------------------------------------------------------
@@ -138,22 +145,29 @@ section = sec_opts[
 ]
 
 st.sidebar.header("⚙️ Model settings")
-threshold_pct = st.sidebar.select_slider("Damage sensitivity (%)", options=list(range(30, 81, 5)), value=45)
+threshold_pct = st.sidebar.select_slider("Damage sensitivity (%)", options=list(range(20, 81, 1)), value=45)
 
 nomes_modelos = [
-    "Du 2015", 
-    "Du 2015 (Compensado)", 
-    "EBSI (Base)", "Du 2018",
+    "Du 2015",
+    "Du 2015 (Compensado)",
+    "EBSI (Base)",
+    "Du 2018",
     "LBP (Linear)",
     "ART (Iterativo)",
     "SIRT (Simultâneo)",
-    "RBF (Suave)"
+    "RBF (Suave)",
+    "Kriging",
+    "Kriging (Ray-based)",
+    "Beam Divergence"
 ]
 
 metodo = st.sidebar.selectbox("Model", options=nomes_modelos, index=3)
 
 # --- RECUPERANDO OS SLIDERS ESPECÍFICOS ---
 ecc, comp_val, ray_tol, art_iter, art_relax = 1.05, 2.5, 0.02, 15, 0.1
+
+beam_angle = np.deg2rad(30)
+radial_decay = 2.0
 
 if any(m in metodo for m in ["Du", "EBSI"]):
     ecc = st.sidebar.slider("Eccentricity of the ellipse (e)", 1.01, 1.30, 1.05)
@@ -165,6 +179,32 @@ elif metodo in ["ART (Iterativo)", "SIRT (Simultâneo)", "LBP (Linear)"]:
     if metodo != "LBP (Linear)":
         art_iter = st.sidebar.slider("Iterations", 1, 50, 15)
         art_relax = st.sidebar.slider("Relaxation factor", 0.01, 0.5, 0.1)
+
+# --- ADICIONE ESTE BLOCO NO index.py ---
+elif "Kriging" in metodo:
+    # Escolha do modelo de variograma
+    opcoes_variograma = ["linear", "gaussian", "spherical", "exponential", "hole-effect"]
+    var_model = st.sidebar.selectbox("Variogram Model", options=opcoes_variograma, index=1)
+    
+    if metodo == "Kriging (Ray-based)":
+        # Controle de densidade de pontos no raio
+        n_seg = st.sidebar.slider("Points per ray (n_segments)", 5, 10, 5)
+        # Controle de anisotropia
+        ani_ratio = st.sidebar.slider("Anisotropy Ratio", 1.0, 10.0, 3.0, step=.1)
+
+elif metodo == "Beam Divergence":
+
+    beam_angle_deg = st.sidebar.slider(
+        "Beam divergence angle (degrees)",
+        5, 60, 30
+    )
+
+    beam_angle = np.deg2rad(beam_angle_deg)
+
+    radial_decay = st.sidebar.slider(
+        "Radial attenuation exponent",
+        0.5, 5.0, 2.0
+    )
 
 # --- PROCESSAMENTO ---
 nodes = section["contour_nodes"]
@@ -206,14 +246,43 @@ grid_y = np.linspace(y_min_real + dy/2, y_max_real - dy/2, ny)
 
 # Dicionário de modelos injetando as variáveis dos sliders
 modelos = {
+
     "Du 2015": lambda: du_interpolation_simple(coords, T, grid_x, grid_y, ecc),
+
     "Du 2015 (Compensado)": lambda: du_interpolation_compensated(coords, T, grid_x, grid_y, ecc, comp_val),
+
     "EBSI (Base)": lambda: ebsi_interpolation(coords, T, grid_x, grid_y, ecc),
+
     "Du 2018": lambda: du_2018_segmented_rays(coords, T, grid_x, grid_y, ecc),
+
     "LBP (Linear)": lambda: linear_back_projection(coords, T, grid_x, grid_y, ray_tol),
+
     "ART (Iterativo)": lambda: art_reconstruction(coords, T, grid_x, grid_y, art_iter, art_relax, ray_tol),
+
     "SIRT (Simultâneo)": lambda: sirt_reconstruction(coords, T, grid_x, grid_y, art_iter, art_relax, ray_tol),
-    "RBF (Suave)": lambda: rbf_interpolation(coords, T, grid_x, grid_y)
+
+    "RBF (Suave)": lambda: rbf_interpolation(coords, T, grid_x, grid_y),
+
+    "Kriging": lambda: kriging_interpolation(
+        coords, T, grid_x, grid_y, 
+        variogram=var_model # Agora usa a variável do slider
+    ),
+    
+    "Kriging (Ray-based)": lambda: ray_kriging_interpolation(
+        coords, T, grid_x, grid_y,
+        n_segments=n_seg,        # Agora usa a variável do slider
+        variogram=var_model,     # Agora usa a variável do slider
+        anisotropy_ratio=ani_ratio # Agora usa a variável do slider
+    ),
+
+    "Beam Divergence": lambda: beam_divergence_interpolation(
+        coords,
+        T,
+        grid_x,
+        grid_y,
+        beam_angle=beam_angle,
+        radial_decay=radial_decay
+    ),
 }
 
 X, Y, v_field = modelos[metodo]()
@@ -224,16 +293,27 @@ v_vals = v_field[has_data]
 
 if len(v_vals) > 0:
     v_max, v_min = np.nanmax(v_vals), np.nanmin(v_vals)
-    v_threshold = (v_min + (v_max - v_min) * (threshold_pct / 100.0)) if any(m in metodo for m in ["2018", "EBSI", "SIRT", "RBF"]) else (v_max * (threshold_pct / 100.0))
+    v_threshold = (v_min + (v_max - v_min) * (threshold_pct / 100.0)) if any(m in metodo for m in ["2018", "EBSI", "SIRT", "RBF", "Beam"]) else (v_max * (threshold_pct / 100.0))
 else: v_max, v_threshold = 1.0, 0.5
 
 diag_field = np.full_like(v_field, np.nan)
 diag_field[has_data & (v_field >= v_threshold)] = 1 # Sadio
 diag_field[has_data & (v_field < v_threshold)] = 0  # Dano
 
+col1, col2, = st.columns(2)
 # --- INTERFACE VISUAL ---
-st.markdown(f"### 🌳 {selected_tree['especie']}")
-c_map, c_hist = st.columns([1, 1])
+col1.info(f"""
+    #### 🌳 Tree infos
+    ###### Specie: `{selected_tree['especie']}`
+    ###### Description: `{selected_tree['description'] if selected_tree['description'] not in ["", None] else "Sem descrição"}`
+    ###### Condition: `{selected_tree['condition'] if selected_tree['condition'] not in ["", None] else "Não especificada"}`
+""")
+
+col2.info(f"""
+    ###### Latitude: `{selected_tree['location']['latitude'] if selected_tree['location']['latitude'] not in ["", None] else "Não especificada"}`
+    ###### Longitude: `{selected_tree['location']['longitude'] if selected_tree['location']['longitude'] not in ["", None] else "Não especificada"}`
+    ###### Altitude (m): `{selected_tree['location']['altitude_m'] if selected_tree['location']['altitude_m'] not in ["", None] else "Não especificada"}`
+""")
 
 ext_cm = [
     (x_min_real - dx/2) * 100,
@@ -242,6 +322,17 @@ ext_cm = [
     (y_max_real + dy/2) * 100
 ]
 
+# --- MÉTRICAS ---
+p_amostrados = np.count_nonzero(~np.isnan(diag_field))
+p_criticos = np.count_nonzero(diag_field == 0)
+dano_perc = (p_criticos / p_amostrados * 100) if p_amostrados > 0 else 0
+
+m1, m2, m3 = st.columns(3)
+m1.metric("V-max", f"{v_max:.0f} m/s")
+m2.metric("Threshold", f"{v_threshold:.0f} m/s")
+m3.metric("Damage estimation", f"{dano_perc:.1f}%")
+
+c_map, c_hist = st.columns([1, 1])
 with c_map:
     st.markdown("##### Cross-sectional visualization (cm)")
     fig_ui, ax_ui = plt.subplots(figsize=(6, 6))
@@ -271,16 +362,6 @@ with c_hist:
         ax_h.axvline(v_threshold, color='red', linestyle='--', linewidth=2, label=f'Corte: {v_threshold:.0f} m/s')
         ax_h.legend(); ax_h.grid(axis='y', alpha=0.2)
         st.pyplot(fig_h)
-
-# --- MÉTRICAS ---
-p_amostrados = np.count_nonzero(~np.isnan(diag_field))
-p_criticos = np.count_nonzero(diag_field == 0)
-dano_perc = (p_criticos / p_amostrados * 100) if p_amostrados > 0 else 0
-
-m1, m2, m3 = st.columns(3)
-m1.metric("V-max", f"{v_max:.0f} m/s")
-m2.metric("Threshold", f"{v_threshold:.0f} m/s")
-m3.metric("Damage estimation", f"{dano_perc:.1f}%")
 
 # --- NOME SEMÂNTICO DO ZIP ---
 species = selected_tree["especie"].replace(" ", "_")
