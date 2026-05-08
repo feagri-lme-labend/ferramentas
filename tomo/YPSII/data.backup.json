@@ -3234,14 +3234,7 @@
     },
     {
       "id_arvore": 5,
-      "sections": [
-        {
-          "height_cm": 50,
-          "acquisition_time": "2026-05-07T17:23:22.059069",
-          "transducers": [],
-          "propagation_paths": []
-        }
-      ]
+      "sections": []
     }
   ]
 }

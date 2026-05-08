@@ -83,7 +83,7 @@ trees_filtered = [
 ]
 
 tree_options = {
-    f"{t['especie']} — Árvore {t['id_arvore']}": t
+    f"{t['especie']} — Tree {t['id_arvore']}": t
     for t in trees_filtered
 }
 
